@@ -199,16 +199,18 @@ export default function Home() {
         if (!targetRecord) {
             return;
         }
+        const data = {
+            latLng: currentLocation.current,
+            record: {
+                address_components: targetRecord.address_components,
+                formatted_address: targetRecord.formatted_address
+            },
+            isOutDistance: isOutDistance.current
+        }
+        console.log(data);
         window?.parent?.postMessage({
             action: 'onChange',
-            data: {
-                latLng: currentLocation.current,
-                record: {
-                    address_components: targetRecord.address_components,
-                    formatted_address: targetRecord.formatted_address
-                },
-                isOutDistance: isOutDistance.current
-            }
+            data
         }, '*')
     }
     useEffect(() => {
