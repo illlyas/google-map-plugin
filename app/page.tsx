@@ -1,113 +1,286 @@
-import Image from 'next/image'
+'use client';
+
+import {Box} from "@mui/system";
+import {
+    List,
+    ListItem,
+    ListItemButton,
+    ListItemText,
+    Divider,
+    ListItemAvatar, Avatar, IconButton, Alert, Snackbar
+} from "@mui/material";
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import {useSearchParams} from "next/navigation";
+import {useEffect, useRef, useState} from "react";
+
+import MyLocationIcon from '@mui/icons-material/MyLocation';
+import {Loader} from "@googlemaps/js-api-loader";
+import {next} from "sucrase/dist/types/parser/tokenizer";
+import {util} from "zod";
+import find = util.find;
+
+interface IPos {
+    lat: number,
+    lng: number
+}
 
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
-      </div>
+    const params = useSearchParams();
+    const onClose = () => {
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+    }
+    const radius = parseInt(params.get('radius') as string, 10) || 0;
+    const onFail = (msg: string) => {
 
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
+    }
+    const onReject = (error) => {
+        console.log(error)
+    }
+
+    const mapRef = useRef<HTMLDivElement>(null);
+    const [records, setRecords] = useState<Record<string, any>[]>([]);
+    const [activePlaceId, setActivePlaceId] = useState('');
+    const [errOpen, setErrOpen] = useState(false)
+    const geocoder = useRef<any>();
+    const gMap = useRef<any>();
+    const marker = useRef<any>();
+    const circle = useRef<any>();
+    const isOutDistance = useRef<boolean>(false);
+    const pos = useRef<IPos>({
+        lat: 0,
+        lng: 0
+    });
+    const currentLocation = useRef<IPos>({
+        lat: 0,
+        lng: 0
+    })
+    const loadGoogleMap = () => {
+        const loader = new Loader({
+            apiKey: "AIzaSyBr-Wsgz7CNSQ61ePeNbq-2A88b7XI1c8o",
+            version: "weekly",
+        });
+        return loader.load();
+    }
+    const getGeoLocation = (success: () => void) => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    pos.current = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                    };
+                    success();
+                }, (error) => {
+                    onReject(error)
+                }, {
+                    enableHighAccuracy: true // 高精度匹配获取
+                });
+        } else {
+            onFail('The current browser environment does not support network positioning')
+        }
+    }
+
+    const initGoogleMapLayer = () => {
+        const map = new window.google.maps.Map(mapRef.current, {
+            center: pos.current,
+            zoom: 14,
+            mapTypeId: "OSM",
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            zoomControl: false
+        });
+
+        map.mapTypes.set("OSM", new window.google.maps.ImageMapType({
+            getTileUrl: (coord: any, zoom: number) => {
+                return "https://tile.openstreetmap.org/" + zoom + "/" + coord.x + "/" + coord.y + ".png";
+            },
+            tileSize: new window.google.maps.Size(256, 256),
+            name: "OpenStreetMap",
+            maxZoom: 18
+        }));
+        return map;
+    }
+    const initGeoCoder = () => new window.google.maps.Geocoder();
+    const addCircle = () => {
+        if (!radius) {
+            return;
+        }
+        return new window.google.maps.Circle({
+            fillColor: '#2f7debb8', // 圆形填充颜色
+            fillOpacity: '0.7',
+            strokeColor: '#EDEFF3', // 描边颜色
+            strokeWeight: 2, // 描边宽度
+            map: gMap.current,
+            center: pos.current,
+            radius,
+        });
+    }
+    const addMarker = (position: IPos) => {
+        const marker = new window.google.maps.Marker({
+            position,
+            map: gMap.current,
+            draggable: !!radius
+        });
+        marker.addListener('dragend', (e: any) => {
+            const nextPos = {
+                lat: e.latLng.lat(),
+                lng: e.latLng.lng()
+            }
+            formatGeoCoder(nextPos);
+            handleLocationChange(nextPos)
+        });
+        return marker;
+    }
+
+
+    const formatGeoCoder = (latlng: IPos) => {
+        geocoder.current.geocode({location: latlng})
+            .then((response: any) => {
+                const results = response.results;
+                if (!results) {
+                    return;
+                }
+                setRecords(results);
+                if (results[0]) {
+                    setActivePlaceId(results[0].place_id);
+                }
+            })
+            .catch((e: string) => onFail(e))
+    }
+    const handleItemClick = (record: Record<string, any>) => {
+        if (record.place_id === activePlaceId) {
+            return;
+        }
+        if (!radius) {
+            return;
+        }
+        if (marker.current) {
+            marker.current.setMap(null);
+            const nextPos = {
+                lat: record.geometry.location.lat(),
+                lng: record.geometry.location.lng()
+            }
+            marker.current = addMarker(nextPos);
+            setActivePlaceId(record.place_id);
+            handleLocationChange(nextPos);
+        }
+    }
+    const handleResetLocation = () => {
+        getGeoLocation(() => {
+            gMap.current.setZoom(14);
+            gMap.current.setCenter(pos.current);
+            circle.current.setMap(null);
+            circle.current = addCircle();
+            marker.current.setMap(null);
+            marker.current = addMarker(pos.current);
+            formatGeoCoder(pos.current);
+            handleLocationChange(pos.current);
+        })
+    }
+    const handleLocationChange = (nextPos: IPos) => {
+        const latLngA = new window.google.maps.LatLng(pos.current.lat, pos.current.lng);
+        const latLngB = new window.google.maps.LatLng(nextPos.lat, nextPos.lng)
+        const distance = window.google.maps.geometry.spherical.computeDistanceBetween(latLngA, latLngB);
+        isOutDistance.current = distance >= radius;
+        currentLocation.current = nextPos;
+        if (isOutDistance.current && radius) {
+            setErrOpen(true);
+        }
+        window.parent.postMessage({
+            latLng: pos.current,
+            record: find(records, (record) => record.place_id === activePlaceId),
+            isOutDistance: isOutDistance.current
+        })
+    }
+    useEffect(() => {
+        getGeoLocation(() => {
+            loadGoogleMap().then(() => {
+                gMap.current = initGoogleMapLayer();
+                geocoder.current = initGeoCoder();
+                circle.current = addCircle();
+                marker.current = addMarker(pos.current);
+                formatGeoCoder(pos.current);
+                handleLocationChange(pos.current);
+            })
+        })
+    }, []);
+    return (<Box sx={{
+        display: 'flex',
+        height: '100%',
+        flexDirection: 'column'
+    }}>
+        <Box sx={{
+            flex: 1,
+            position: 'relative'
+        }}>
+            <Box ref={mapRef} sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%'
+            }}/>
+            <Box sx={{
+                position: 'absolute',
+                top: 15,
+                right: 15
+            }}>
+                <IconButton onClick={handleResetLocation}>
+                    <MyLocationIcon color="primary"/>
+                </IconButton>
+            </Box>
+        </Box>
+        <Box sx={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            borderTop: '1px solid #ccc'
+        }}>
+            <List sx={{width: '100%', bgcolor: 'background.paper'}}>
+                {records.map((record) => {
+                    return (
+                        <Box key={record.place_id}>
+                            <ListItem
+                                disablePadding
+                                onClick={() => {
+                                    handleItemClick(record)
+                                }}
+                            >
+                                <ListItemButton>
+                                    <ListItemAvatar sx={{
+                                        visibility: record.place_id === activePlaceId ? 'visible' : 'hidden'
+                                    }}>
+                                        <Avatar>
+                                            <LocationOnIcon/>
+                                        </Avatar>
+                                    </ListItemAvatar>
+                                    <ListItemText primary={record.formatted_address}
+                                                  secondary={record.address_components.map((item) => {
+                                                      return item.long_name
+                                                  }).join('-')}/>
+                                </ListItemButton>
+                            </ListItem>
+                            <Divider variant="inset"/>
+                        </Box>
+                    );
+                })}
+            </List>
+        </Box>
+        <Snackbar anchorOrigin={{
+            vertical: 'top',
+            horizontal: 'center'
+        }}
+                  onClose={() => {
+                      setErrOpen(false);
+                  }}
+                  open={errOpen}
+                  autoHideDuration={3000}
         >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore the Next.js 13 playground.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+            <Alert severity="error">
+                Location drifted out of fine-tuning range, please adjust
+            </Alert>
+        </Snackbar>
+    </Box>)
 }
