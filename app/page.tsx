@@ -135,7 +135,7 @@ export default function Home() {
                 lng: e.latLng.lng()
             }
             formatGeoCoder(nextPos);
-            handleLocationChange(nextPos)
+            currentLocation.current = nextPos;
         });
         return marker;
     }
@@ -170,7 +170,7 @@ export default function Home() {
             }
             marker.current = addMarker(nextPos);
             setActivePlaceId(record.place_id);
-            handleLocationChange(nextPos);
+            currentLocation.current = nextPos;
         }
     }
     const handleResetLocation = () => {
@@ -182,20 +182,39 @@ export default function Home() {
             marker.current.setMap(null);
             marker.current = addMarker(pos.current);
             formatGeoCoder(pos.current);
-            handleLocationChange(pos.current);
+            currentLocation.current = pos.current
         })
     }
-    const handleLocationChange = (nextPos: IPos) => {
+    useEffect(() => {
+        if (!apiKey) {
+            onFail('No API Key')
+            return;
+        }
+        getGeoLocation(() => {
+            loadGoogleMap().then(() => {
+                gMap.current = initGoogleMapLayer();
+                geocoder.current = initGeoCoder();
+                circle.current = addCircle();
+                marker.current = addMarker(pos.current);
+                formatGeoCoder(pos.current);
+                currentLocation.current = pos.current;
+            })
+        })
+    }, []);
+    useEffect(()=>{
+        if(!window.google){
+            return;
+        }
+        const nextPos = currentLocation.current;
         const latLngA = new window.google.maps.LatLng(pos.current.lat, pos.current.lng);
         const latLngB = new window.google.maps.LatLng(nextPos.lat, nextPos.lng)
         const distance = window.google.maps.geometry.spherical.computeDistanceBetween(latLngA, latLngB);
         isOutDistance.current = distance >= radius;
-        currentLocation.current = nextPos;
         if (isOutDistance.current && radius) {
             setErrOpen(true);
             setErrMsg('Location drifted out of fine-tuning range, please adjust')
         }
-        const targetRecord: any = find(records, (record) => record.place_id === activePlaceId)
+        const targetRecord: any = find(records, (record) => record.place_id === activePlaceId);
         if (!targetRecord) {
             return;
         }
@@ -212,25 +231,7 @@ export default function Home() {
             action: 'onChange',
             data
         }, '*')
-    }
-    useEffect(() => {
-        if (!apiKey) {
-            onFail('No API Key')
-            return;
-        }
-        getGeoLocation(() => {
-            loadGoogleMap().then(() => {
-                gMap.current = initGoogleMapLayer();
-                geocoder.current = initGeoCoder();
-                circle.current = addCircle();
-                marker.current = addMarker(pos.current);
-                formatGeoCoder(pos.current);
-                setTimeout(() => {
-                    handleLocationChange(pos.current);
-                }, 300)
-            })
-        })
-    }, []);
+    },[currentLocation.current])
     return (<Box sx={{
         display: 'flex',
         height: '100%',
