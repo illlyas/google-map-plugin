@@ -22,6 +22,7 @@ interface IPos {
     lat: number,
     lng: number
 }
+
 export default function Home() {
     const params = useSearchParams();
     const radius = parseInt(params.get('radius') as string, 10) || 0;
@@ -194,17 +195,24 @@ export default function Home() {
             setErrOpen(true);
             setErrMsg('Location drifted out of fine-tuning range, please adjust')
         }
+        const targetRecord: any = find(records, (record) => record.place_id === activePlaceId)
+        if (!targetRecord) {
+            return;
+        }
         window?.parent?.postMessage({
             action: 'onChange',
             data: {
                 latLng: currentLocation.current,
-                record: find(records, (record) => record.place_id === activePlaceId),
+                record: {
+                    address_components: targetRecord.address_components,
+                    formatted_address: targetRecord.formatted_address
+                },
                 isOutDistance: isOutDistance.current
             }
         }, '*')
     }
     useEffect(() => {
-        if(!apiKey){
+        if (!apiKey) {
             onFail('No API Key')
             return;
         }
@@ -273,7 +281,7 @@ export default function Home() {
                                         </Avatar>
                                     </ListItemAvatar>
                                     <ListItemText primary={record.formatted_address}
-                                                  secondary={record.address_components.map((item:any) => {
+                                                  secondary={record.address_components.map((item: any) => {
                                                       return item.long_name
                                                   }).join('-')}/>
                                 </ListItemButton>
