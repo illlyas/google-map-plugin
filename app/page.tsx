@@ -22,14 +22,10 @@ interface IPos {
     lat: number,
     lng: number
 }
-
 export default function Home() {
     const params = useSearchParams();
-
-    const onClose = () => {
-
-    }
     const radius = parseInt(params.get('radius') as string, 10) || 0;
+    const apiKey = params.get('apiKey') as string;
     const onFail = (msg: string) => {
         window?.parent?.postMessage({
             action: 'fail'
@@ -37,7 +33,7 @@ export default function Home() {
         setErrMsg(msg);
         setErrOpen(true);
     }
-    const onReject = (error) => {
+    const onReject = (error: any) => {
         console.log(error)
         window?.parent?.postMessage({
             action: 'reject'
@@ -66,7 +62,7 @@ export default function Home() {
     })
     const loadGoogleMap = () => {
         const loader = new Loader({
-            apiKey: "AIzaSyBr-Wsgz7CNSQ61ePeNbq-2A88b7XI1c8o",
+            apiKey,
             version: "weekly",
         });
         return loader.load();
@@ -208,6 +204,10 @@ export default function Home() {
         }, '*')
     }
     useEffect(() => {
+        if(!apiKey){
+            onFail('No API Key')
+            return;
+        }
         getGeoLocation(() => {
             loadGoogleMap().then(() => {
                 gMap.current = initGoogleMapLayer();
@@ -273,7 +273,7 @@ export default function Home() {
                                         </Avatar>
                                     </ListItemAvatar>
                                     <ListItemText primary={record.formatted_address}
-                                                  secondary={record.address_components.map((item) => {
+                                                  secondary={record.address_components.map((item:any) => {
                                                       return item.long_name
                                                   }).join('-')}/>
                                 </ListItemButton>
