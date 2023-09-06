@@ -29,7 +29,9 @@ export default function Home() {
     const apiKey = params.get('apiKey') as string;
     const onFail = (msg: string) => {
         window?.parent?.postMessage({
-            action: 'fail'
+            pluginMessage: {
+                action: 'fail'
+            }
         }, '*');
         setErrMsg(msg);
         setErrOpen(true);
@@ -37,7 +39,9 @@ export default function Home() {
     const onReject = (error: any) => {
         console.log(error)
         window?.parent?.postMessage({
-            action: 'reject'
+            pluginMessage: {
+                action: 'reject'
+            }
         }, '*');
         setErrMsg(JSON.stringify(error));
         setErrOpen(true);
@@ -201,8 +205,8 @@ export default function Home() {
             })
         })
     }, []);
-    useEffect(()=>{
-        if(!window.google){
+    useEffect(() => {
+        if (!window.google) {
             return;
         }
         const nextPos = currentLocation.current;
@@ -226,12 +230,13 @@ export default function Home() {
             },
             isOutDistance: isOutDistance.current
         }
-        console.log(data);
         window?.parent?.postMessage({
-            action: 'onChange',
-            data
+            pluginMessage: {
+                action: 'onChange',
+                data
+            }
         }, '*')
-    },[currentLocation.current])
+    }, [currentLocation.current])
     return (<Box sx={{
         display: 'flex',
         height: '100%',
