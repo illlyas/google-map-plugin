@@ -15,7 +15,6 @@ import {useEffect, useRef, useState} from "react";
 
 import MyLocationIcon from '@mui/icons-material/MyLocation';
 import {Loader} from "@googlemaps/js-api-loader";
-import {next} from "sucrase/dist/types/parser/tokenizer";
 import {util} from "zod";
 import find = util.find;
 
@@ -26,21 +25,32 @@ interface IPos {
 
 export default function Home() {
     const params = useSearchParams();
+
     const onClose = () => {
 
     }
     const radius = parseInt(params.get('radius') as string, 10) || 0;
     const onFail = (msg: string) => {
-
+        window?.parent?.postMessage({
+            action: 'fail'
+        }, '*');
+        setErrMsg(msg);
+        setErrOpen(true);
     }
     const onReject = (error) => {
         console.log(error)
+        window?.parent?.postMessage({
+            action: 'reject'
+        }, '*');
+        setErrMsg(JSON.stringify(error));
+        setErrOpen(true);
     }
 
     const mapRef = useRef<HTMLDivElement>(null);
     const [records, setRecords] = useState<Record<string, any>[]>([]);
     const [activePlaceId, setActivePlaceId] = useState('');
-    const [errOpen, setErrOpen] = useState(false)
+    const [errOpen, setErrOpen] = useState(false);
+    const [errMsg, setErrMsg] = useState('Location drifted out of fine-tuning range, please adjust')
     const geocoder = useRef<any>();
     const gMap = useRef<any>();
     const marker = useRef<any>();
@@ -186,12 +196,16 @@ export default function Home() {
         currentLocation.current = nextPos;
         if (isOutDistance.current && radius) {
             setErrOpen(true);
+            setErrMsg('Location drifted out of fine-tuning range, please adjust')
         }
-        window.parent.postMessage({
-            latLng: pos.current,
-            record: find(records, (record) => record.place_id === activePlaceId),
-            isOutDistance: isOutDistance.current
-        })
+        window?.parent?.postMessage({
+            action: 'onChange',
+            data: {
+                latLng: currentLocation.current,
+                record: find(records, (record) => record.place_id === activePlaceId),
+                isOutDistance: isOutDistance.current
+            }
+        }, '*')
     }
     useEffect(() => {
         getGeoLocation(() => {
@@ -201,7 +215,9 @@ export default function Home() {
                 circle.current = addCircle();
                 marker.current = addMarker(pos.current);
                 formatGeoCoder(pos.current);
-                handleLocationChange(pos.current);
+                setTimeout(() => {
+                    handleLocationChange(pos.current);
+                }, 300)
             })
         })
     }, []);
@@ -279,7 +295,7 @@ export default function Home() {
                   autoHideDuration={3000}
         >
             <Alert severity="error">
-                Location drifted out of fine-tuning range, please adjust
+                {errMsg}
             </Alert>
         </Snackbar>
     </Box>)
